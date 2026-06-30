@@ -15,11 +15,8 @@ Flujo de versiones:
 
 El lanzador instalado lee `version.json`, compara la version local y, si hay una version nueva, descarga el ZIP indicado, valida su SHA-256 y aplica la actualizacion.
 
-Primer push:
-```bat
-cd /d C:\Codex\App_etiquetado_perchas\github_release
-"C:\Users\irodriguez\AppData\Local\GitHubDesktop\app-3.5.12\resources\app\git\cmd\git.exe" push -u origin main
-```
-
-El remoto configurado es:
-`https://github.com/irodriguezfino/app-etiquetado-pesos-updates.git`
+Primer push con GitHub Desktop:
+- Abrir `C:\Codex\App_etiquetado_perchas\github_release`.
+- Pulsar `Publish repository`.
+- Usar exactamente este nombre: `app-etiquetado-pesos-updates`.
+- Mantenerlo publico o privado, pero si es privado los equipos remotos necesitaran acceso para descargar actualizaciones.
