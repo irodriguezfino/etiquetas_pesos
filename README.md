@@ -14,3 +14,12 @@ Flujo de versiones:
 4. Subir a este repositorio solo el contenido de `github_release`.
 
 El lanzador instalado lee `version.json`, compara la version local y, si hay una version nueva, descarga el ZIP indicado, valida su SHA-256 y aplica la actualizacion.
+
+Primer push:
+```bat
+cd /d C:\Codex\App_etiquetado_perchas\github_release
+"C:\Users\irodriguez\AppData\Local\GitHubDesktop\app-3.5.12\resources\app\git\cmd\git.exe" push -u origin main
+```
+
+El remoto configurado es:
+`https://github.com/irodriguezfino/app-etiquetado-pesos-updates.git`
