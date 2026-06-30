@@ -3,8 +3,8 @@
     "notes":  "Version inicial de Etiquetado Pesos.",
     "auto_update":  {
                         "type":  "zip",
-                        "url":  "https://github.com/irodriguezfino/app-etiquetado-pesos-updates/raw/main/releases/Etiquetado_Pesos_v1.0.0_update.zip",
+                        "url":  "https://github.com/irodriguezfino/etiquetas_pesos/raw/main/releases/Etiquetado_Pesos_v1.0.0_update.zip",
                         "file":  "Etiquetado_Pesos_v1.0.0_update.zip",
-                        "sha256":  "61e0f2762f4512dba0725e803474de74239b4caa55aae8c2b60de200efaab748"
+                        "sha256":  "ff69bc7655f6e98eb6164db25fc5c8495be820a5723fbc317c06c60b7f7d190e"
                     }
 }

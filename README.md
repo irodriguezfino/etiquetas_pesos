@@ -18,5 +18,5 @@ El lanzador instalado lee `version.json`, compara la version local y, si hay una
 Primer push con GitHub Desktop:
 - Abrir `C:\Codex\App_etiquetado_perchas\github_release`.
 - Pulsar `Publish repository`.
-- Usar exactamente este nombre: `app-etiquetado-pesos-updates`.
+- Usar exactamente este nombre: `etiquetas_pesos`.
 - Mantenerlo publico o privado, pero si es privado los equipos remotos necesitaran acceso para descargar actualizaciones.
