@@ -1,10 +1,10 @@
 ﻿{
-    "version":  "1.0.0",
-    "notes":  "Version inicial de Etiquetado Pesos.",
+    "version":  "1.0.1",
+    "notes":  "Selector separado de articulo y rango de pesos.",
     "auto_update":  {
                         "type":  "zip",
-                        "url":  "https://github.com/irodriguezfino/etiquetas_pesos/raw/main/releases/Etiquetado_Pesos_v1.0.0_update.zip",
-                        "file":  "Etiquetado_Pesos_v1.0.0_update.zip",
-                        "sha256":  "ff69bc7655f6e98eb6164db25fc5c8495be820a5723fbc317c06c60b7f7d190e"
+                        "url":  "https://github.com/irodriguezfino/etiquetas_pesos/raw/main/releases/Etiquetado_Pesos_v1.0.1_update.zip",
+                        "file":  "Etiquetado_Pesos_v1.0.1_update.zip",
+                        "sha256":  "fa3a333e4cfabf58f4c7e0a228ca1eae8c769f367b4d49154920c403e281b26d"
                     }
 }
