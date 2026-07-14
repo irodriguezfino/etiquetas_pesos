@@ -2,6 +2,10 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.5] - 2026-07-14
+
+- Article selector now displays only the article name while retaining code-based range lookup and search.
+
 ## [1.0.4] - 2026-07-14
 
 - Improved help tooltips: delayed hover activation, no focus activation, immediate dismissal on interaction, and screen-bound placement.

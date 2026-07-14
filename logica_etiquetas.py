@@ -277,7 +277,7 @@ def article_options(path: Path = SALAZON_CONFIG_PATH) -> list[tuple[str, str, st
     ranges = load_salazon_ranges(path)
     if ranges:
         return [
-            (item.articulo_codigo, item.articulo_nombre, f"{item.articulo_codigo} - {item.articulo_nombre}")
+            (item.articulo_codigo, item.articulo_nombre, item.articulo_nombre)
             for item in sorted(
                 ranges,
                 key=lambda item: (
@@ -289,7 +289,7 @@ def article_options(path: Path = SALAZON_CONFIG_PATH) -> list[tuple[str, str, st
             )
         ]
     legend = load_article_legend(ARTICULOS_PATH)
-    return [(code, name, f"{code} - {name}") for code, name in sorted(legend.items(), key=lambda item: _article_code_priority_key(item[0]))]
+    return [(code, name, name) for code, name in sorted(legend.items(), key=lambda item: _article_code_priority_key(item[0]))]
 
 
 def unique_article_options(path: Path = SALAZON_CONFIG_PATH) -> list[tuple[str, str, str]]:
@@ -311,7 +311,7 @@ def unique_article_options(path: Path = SALAZON_CONFIG_PATH) -> list[tuple[str, 
             if key in seen:
                 continue
             seen.add(key)
-            result.append((item.articulo_codigo, name, f"{item.articulo_codigo} - {name}"))
+            result.append((item.articulo_codigo, name, name))
         return result
     return article_options(path)
 

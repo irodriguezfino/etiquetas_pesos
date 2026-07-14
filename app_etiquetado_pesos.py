@@ -382,7 +382,7 @@ class EtiquetadoPesosApp(tk.Tk):
         self.article_combo.grid(row=0, column=1, sticky="ew", padx=(12, 0))
         self.article_combo.bind("<<ComboboxSelected>>", lambda _e: self._refresh_ranges_for_article())
         self.article_combo.bind("<KeyRelease>", self._filter_articles)
-        ToolTip(self.article_combo, "Escribe parte del codigo o nombre y selecciona el articulo.")
+        ToolTip(self.article_combo, "Escribe parte del nombre y selecciona el articulo.")
 
         ttk.Label(panel, text="Rango de pesos", style="Surface.TLabel").grid(row=1, column=0, sticky="w", pady=(10, 0))
         self.range_combo = ttk.Combobox(panel, textvariable=self.var_rango, values=(), height=8, state="readonly")
@@ -482,7 +482,11 @@ class EtiquetadoPesosApp(tk.Tk):
         if not typed:
             values = self._article_display_values()
         else:
-            values = [display for _code, _name, display in self.article_values if typed in display.lower()]
+            values = [
+                display
+                for code, name, display in self.article_values
+                if typed in code.lower() or typed in name.lower()
+            ]
         self.article_combo.configure(values=values[:80])
         self._refresh_ranges_for_article()
 
@@ -500,7 +504,7 @@ class EtiquetadoPesosApp(tk.Tk):
                 if item[0] == code:
                     return item
         lowered = raw.lower()
-        matches = [item for item in self.article_values if lowered in item[2].lower()]
+        matches = [item for item in self.article_values if lowered in item[0].lower() or lowered in item[1].lower()]
         return matches[0] if len(matches) == 1 else None
 
     def _refresh_ranges_for_article(self) -> None:
