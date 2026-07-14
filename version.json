@@ -1,0 +1,10 @@
+﻿{
+    "version":  "1.0.2",
+    "notes":  "Correccion de articulos con sufijo W para ocultar rangos en el selector.",
+    "auto_update":  {
+                        "type":  "zip",
+                        "url":  "https://github.com/irodriguezfino/etiquetas_pesos/raw/main/releases/Etiquetado_Pesos_v1.0.2_update.zip",
+                        "file":  "Etiquetado_Pesos_v1.0.2_update.zip",
+                        "sha256":  "3f42209658df718a25b30488c25bf213e00f1addb30ec91dad65b9904feebedc"
+                    }
+}
