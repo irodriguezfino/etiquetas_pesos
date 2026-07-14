@@ -15,7 +15,9 @@ $icon = "assets\ICONO_SUITE_RRHH.ico"
 $staging = "dist\Etiquetado_Pesos_Instalado"
 
 & $python @pythonArgs tools/versioning.py generate
+if ($LASTEXITCODE -ne 0) { throw "No se pudieron generar los archivos de version." }
 $version = (& $python @pythonArgs tools/versioning.py print-version).Trim()
+if ($LASTEXITCODE -ne 0) { throw "No se pudo leer la version del proyecto." }
 
 if (-not (Test-Path $icon)) { throw "No se encuentra el icono $icon." }
 if (-not (Test-Path "config\config_salazon.csv")) { throw "No se encuentra config\config_salazon.csv." }
@@ -23,8 +25,11 @@ if (-not (Test-Path "config\config_salazon.csv")) { throw "No se encuentra confi
 New-Item -ItemType Directory -Force -Path "github_release\releases", "github_release\installers" | Out-Null
 
 & $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos_App" --icon $icon --version-file "build\version_info.txt" --add-data "assets;assets" --add-data "config;config" --hidden-import win32print --hidden-import win32con --hidden-import win32ui --hidden-import PIL.ImageWin app_etiquetado_pesos.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller no pudo generar Etiquetado_Pesos_App.exe." }
 & $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos" --icon $icon --version-file "build\version_info.txt" lanzador_pesos.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller no pudo generar Etiquetado_Pesos.exe." }
 & $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos_Updater" --icon $icon --version-file "build\version_info.txt" actualizador_pesos.py
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller no pudo generar Etiquetado_Pesos_Updater.exe." }
 
 if (Test-Path $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
@@ -45,5 +50,6 @@ $zipPath = "github_release\releases\$zipName"
 if (Test-Path $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
 Compress-Archive -Path "$staging\*" -DestinationPath $zipPath -Force
 & $python @pythonArgs tools/versioning.py manifest --zip $zipPath --out "github_release\releases" --notes $ReleaseNotes
+if ($LASTEXITCODE -ne 0) { throw "No se pudo generar el manifiesto de actualizacion." }
 
 Write-Host "Build preparado: $zipPath"

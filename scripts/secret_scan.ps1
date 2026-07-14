@@ -12,7 +12,11 @@ $patterns = @(
 )
 
 $excluded = "\\(.git|build|dist|__pycache__|github_release|.pytest_cache)\\"
-$files = Get-ChildItem -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch $excluded }
+$textExtensions = @(".bat", ".csv", ".ini", ".iss", ".json", ".md", ".ps1", ".py", ".toml", ".txt", ".yaml", ".yml")
+$textNames = @(".gitattributes", ".gitignore", "LICENSE")
+$files = Get-ChildItem -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object {
+  $_.FullName -notmatch $excluded -and ($_.Extension -in $textExtensions -or $_.Name -in $textNames)
+}
 $findings = @()
 foreach ($file in $files) {
   foreach ($pattern in $patterns) {

@@ -56,8 +56,8 @@ Ver [docs/UPDATES.md](docs/UPDATES.md).
 Las releases se publican creando una etiqueta `vX.Y.Z` que coincida con `pyproject.toml`.
 
 ```powershell
-git tag -a v1.0.2 -m "Release v1.0.2"
-git push origin v1.0.2
+git tag -a v1.0.3 -m "Release v1.0.3"
+git push origin v1.0.3
 ```
 
 Ver [docs/RELEASE.md](docs/RELEASE.md).

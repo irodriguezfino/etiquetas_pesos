@@ -1,9 +1,9 @@
 function Get-ProjectPython {
   $candidates = @(
-    @{ Command = "python"; Args = @() },
-    @{ Command = "py"; Args = @("-3") },
     @{ Command = Join-Path $env:LocalAppData "Python\pythoncore-3.14-64\python.exe"; Args = @() },
-    @{ Command = Join-Path $env:LocalAppData "Python\bin\python.exe"; Args = @() }
+    @{ Command = Join-Path $env:LocalAppData "Python\bin\python.exe"; Args = @() },
+    @{ Command = "python"; Args = @() },
+    @{ Command = "py"; Args = @("-3") }
   )
 
   foreach ($candidate in $candidates) {

@@ -1,6 +1,6 @@
 [project]
 name = "etiquetado-perchas"
-version = "1.0.2"
+version = "1.0.3"
 description = "Aplicacion de etiquetado de pesos para Rodriguez - Finura"
 requires-python = ">=3.10"
 dependencies = [

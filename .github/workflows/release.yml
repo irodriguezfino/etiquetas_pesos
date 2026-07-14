@@ -80,3 +80,21 @@ jobs:
           )
           if ($tag -match "-") { $args += "--prerelease" }
           gh @args
+
+      - name: Publish legacy update manifest
+        if: ${{ !contains(github.ref_name, '-') }}
+        shell: pwsh
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          Copy-Item "github_release/releases/version.json" "version.json" -Force
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "El manifiesto legacy ya estaba actualizado."
+            exit 0
+          }
+          git commit -m "chore: publish legacy update manifest $env:GITHUB_REF_NAME"
+          git push origin HEAD:main
