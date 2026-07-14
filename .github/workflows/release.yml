@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: ./scripts/install_deps.ps1
+
+      - name: Validate tag matches project version
+        shell: pwsh
+        run: python tools/versioning.py validate-tag "${env:GITHUB_REF_NAME}"
+
+      - name: Secret scan
+        shell: pwsh
+        run: ./scripts/secret_scan.ps1
+
+      - name: Tests
+        shell: pwsh
+        run: ./scripts/test.ps1
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build release package
+        shell: pwsh
+        run: ./scripts/build.ps1 -ReleaseNotes "Release ${env:GITHUB_REF_NAME}"
+
+      - name: Create installer
+        shell: pwsh
+        run: ./scripts/installer.ps1
+
+      - name: Optional code signing
+        shell: pwsh
+        env:
+          WINDOWS_CODESIGN_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CODESIGN_CERTIFICATE_BASE64 }}
+          WINDOWS_CODESIGN_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_CERTIFICATE_PASSWORD }}
+        run: ./scripts/sign_windows.ps1 -Path "github_release"
+
+      - name: Hash artifacts
+        shell: pwsh
+        run: ./scripts/hash.ps1 -Path "github_release" | Tee-Object -FilePath "github_release/SHA256SUMS.txt"
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = (python tools/versioning.py print-version).Trim()
+          $notes = "CHANGELOG.md"
+          $assets = @(
+            (Get-ChildItem "github_release/releases/*" -File).FullName
+            (Get-ChildItem "github_release/installers/*" -File).FullName
+            (Get-Item "github_release/SHA256SUMS.txt").FullName
+          )
+          $args = @("release", "create", $tag) + $assets + @(
+            "--title", "Etiquetado Pesos $version",
+            "--notes-file", $notes
+          )
+          if ($tag -match "-") { $args += "--prerelease" }
+          gh @args

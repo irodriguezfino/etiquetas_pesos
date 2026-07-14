@@ -1,0 +1,22 @@
+[project]
+name = "etiquetado-perchas"
+version = "1.0.2"
+description = "Aplicacion de etiquetado de pesos para Rodriguez - Finura"
+requires-python = ">=3.10"
+dependencies = [
+  "Pillow",
+  "pywin32; platform_system == 'Windows'",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pyinstaller>=6.0",
+  "pytest>=8.0",
+]
+
+[tool.etiquetado_perchas]
+app_name = "Etiquetado Pesos"
+publisher = "Rodriguez - Finura"
+github_owner = "irodriguezfino"
+github_repo = "etiquetas_pesos"
+icon = "assets/ICONO_SUITE_RRHH.ico"

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: ./scripts/install_deps.ps1
+
+      - name: Secret scan
+        shell: pwsh
+        run: ./scripts/secret_scan.ps1
+
+      - name: Tests
+        shell: pwsh
+        run: ./scripts/test.ps1
+
+      - name: Build application package
+        shell: pwsh
+        run: ./scripts/build.ps1 -ReleaseNotes "CI build"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: etiquetado-pesos-ci
+          path: |
+            github_release/releases/*
+            dist/Etiquetado_Pesos_Instalado/**
+          if-no-files-found: error
+          retention-days: 7
