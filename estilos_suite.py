@@ -28,23 +28,39 @@ FONT_FAMILY = "Segoe UI"
 
 
 class ToolTip:
-    def __init__(self, widget, text: str) -> None:
+    def __init__(self, widget, text: str, delay_ms: int = 650) -> None:
         self.widget = widget
         self.text = text
+        self.delay_ms = delay_ms
         self.window: tk.Toplevel | None = None
-        widget.bind("<Enter>", self._show, add="+")
+        self._show_after_id: str | None = None
+        widget.bind("<Enter>", self._schedule_show, add="+")
         widget.bind("<Leave>", self._hide, add="+")
-        widget.bind("<FocusIn>", self._show, add="+")
         widget.bind("<FocusOut>", self._hide, add="+")
+        widget.bind("<ButtonPress>", self._hide, add="+")
+        widget.bind("<KeyPress>", self._hide, add="+")
+        widget.bind("<<ComboboxSelected>>", self._hide, add="+")
+
+    def _schedule_show(self, _event=None) -> None:
+        if self.window or self._show_after_id or not self.text:
+            return
+        self._show_after_id = self.widget.after(self.delay_ms, self._show)
+
+    def _cancel_scheduled_show(self) -> None:
+        if self._show_after_id:
+            try:
+                self.widget.after_cancel(self._show_after_id)
+            except tk.TclError:
+                pass
+            self._show_after_id = None
 
     def _show(self, _event=None) -> None:
+        self._show_after_id = None
         if self.window or not self.text:
             return
-        x = self.widget.winfo_rootx() + 18
-        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
         self.window = tk.Toplevel(self.widget)
         self.window.wm_overrideredirect(True)
-        self.window.wm_geometry(f"+{x}+{y}")
+        self.window.wm_withdraw()
         label = tk.Label(
             self.window,
             text=self.text,
@@ -56,8 +72,25 @@ class ToolTip:
             justify="left",
         )
         label.pack()
+        self.window.update_idletasks()
+
+        popup_width = self.window.winfo_reqwidth()
+        popup_height = self.window.winfo_reqheight()
+        screen_x = self.widget.winfo_vrootx()
+        screen_y = self.widget.winfo_vrooty()
+        screen_width = self.widget.winfo_vrootwidth()
+        screen_height = self.widget.winfo_vrootheight()
+        x = self.widget.winfo_rootx() + 18
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 6
+        x = max(screen_x, min(x, screen_x + screen_width - popup_width))
+        if y + popup_height > screen_y + screen_height:
+            y = max(screen_y, self.widget.winfo_rooty() - popup_height - 6)
+
+        self.window.wm_geometry(f"+{x}+{y}")
+        self.window.wm_deiconify()
 
     def _hide(self, _event=None) -> None:
+        self._cancel_scheduled_show()
         if self.window:
             self.window.destroy()
             self.window = None

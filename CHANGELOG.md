@@ -2,6 +2,10 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.4] - 2026-07-14
+
+- Improved help tooltips: delayed hover activation, no focus activation, immediate dismissal on interaction, and screen-bound placement.
+
 ## [1.0.3] - 2026-07-14
 
 - Preserved the previous update distribution history.
