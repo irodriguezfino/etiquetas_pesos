@@ -2,6 +2,10 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.8] - 2026-07-30
+
+- Article options with identical names and percentages now include their article code, so each cloned article selects only its own weight ranges.
+
 ## [1.0.7] - 2026-07-30
 
 - The updater now waits for the previous launcher to exit before replacing installed files.

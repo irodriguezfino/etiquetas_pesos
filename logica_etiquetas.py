@@ -392,7 +392,15 @@ def unique_article_options(path: Path = SALAZON_CONFIG_PATH) -> list[tuple[str, 
             percentages = unique_article_percentages(records)
             display = f"{name} \u2014 {', '.join(percentages)}" if percentages else name
             result.append((first.articulo_codigo, name, display))
-        return result
+        repeated_displays = {
+            display.casefold()
+            for _code, _name, display in result
+            if sum(candidate[2].casefold() == display.casefold() for candidate in result) > 1
+        }
+        return [
+            (code, name, f"{display} ({code})" if display.casefold() in repeated_displays else display)
+            for code, name, display in result
+        ]
     return article_options(path)
 
 

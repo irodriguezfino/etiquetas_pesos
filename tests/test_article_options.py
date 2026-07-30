@@ -81,6 +81,30 @@ def test_article_options_remove_less_than_and_greater_than_weight_bounds(tmp_pat
     assert [item.range_label for item in records] == ["< 13 kg", "> 19 kg"]
 
 
+def test_duplicate_article_displays_include_code_and_select_their_own_ranges(tmp_path) -> None:
+    config = tmp_path / "config_salazon.csv"
+    config.write_text(
+        "CODIGO FAC;Nombre del producto;Dias SAL;Unidades/Box\n"
+        "6001;JAMON CEBO 100% IBERICO 7-8 kg;8;12\n"
+        "6002;JAMON CEBO 100% IBERICO 12-13 kg;9;12\n",
+        encoding="utf-8",
+    )
+    options = unique_article_options(config)
+    app = EtiquetadoPesosApp.__new__(EtiquetadoPesosApp)
+    app.article_values = options
+    app.var_articulo = _StringValue("JAMON CEBO IBERICO \u2014 100% (6002)")
+
+    selected = app._selected_article()
+
+    assert options == [
+        ("6001", "JAMON CEBO IBERICO", "JAMON CEBO IBERICO \u2014 100% (6001)"),
+        ("6002", "JAMON CEBO IBERICO", "JAMON CEBO IBERICO \u2014 100% (6002)"),
+    ]
+    assert selected is not None
+    assert selected[0] == "6002"
+    assert [item.range_label for item in load_salazon_ranges(config) if item.articulo_codigo == selected[0]] == ["12 - 13 kg"]
+
+
 class _StringValue:
     def __init__(self, value: str) -> None:
         self.value = value
