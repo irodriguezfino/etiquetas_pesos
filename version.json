@@ -1,11 +1,11 @@
 {
-  "version": "1.0.5",
-  "notes": "Release v1.0.5",
+  "version": "1.0.6",
+  "notes": "Release v1.0.6",
   "prerelease": false,
   "auto_update": {
     "type": "zip",
-    "url": "https://github.com/irodriguezfino/etiquetas_pesos/releases/download/v1.0.5/Etiquetado_Pesos_v1.0.5_update.zip",
-    "file": "Etiquetado_Pesos_v1.0.5_update.zip",
-    "sha256": "226dc58581ee620fa7fb3218e9c81c7956965b1efe7572596c313838b20b54c3"
+    "url": "https://github.com/irodriguezfino/etiquetas_pesos/releases/download/v1.0.6/Etiquetado_Pesos_v1.0.6_update.zip",
+    "file": "Etiquetado_Pesos_v1.0.6_update.zip",
+    "sha256": "a0a76701d1b90b6587ff619d4b2930326463b23f0ca385c8ab48a00b23daad87"
   }
 }
