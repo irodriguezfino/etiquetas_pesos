@@ -2,6 +2,12 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.7] - 2026-07-30
+
+- The updater now waits for the previous launcher to exit before replacing installed files.
+- File replacement is atomic and automatically retries Windows sharing violations for up to 45 seconds.
+- Failed updates identify the locked file in the dialog, status file and updater log.
+
 ## [1.0.6] - 2026-07-30
 
 - The article selector groups repeated products and shows their available percentages.

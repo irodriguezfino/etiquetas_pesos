@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import actualizador_pesos as updater
 import lanzador_pesos as launcher
+import pytest
 
 
 def test_parse_version_compares_numeric_parts() -> None:
@@ -49,3 +51,57 @@ def test_manifest_from_release_uses_zip_and_hash_asset(monkeypatch) -> None:
     assert manifest["version"] == "1.2.3"
     assert manifest["auto_update"]["type"] == "zip"
     assert manifest["auto_update"]["sha256"] == "a" * 64
+
+
+def test_copy_file_with_retry_replaces_destination_atomically(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source.exe"
+    destination = tmp_path / "destination.exe"
+    source.write_bytes(b"new")
+    destination.write_bytes(b"old")
+    original_replace = updater.os.replace
+    calls = 0
+
+    def replace_after_one_lock(source_path, destination_path):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            error = OSError("sharing violation")
+            error.winerror = 32
+            raise error
+        return original_replace(source_path, destination_path)
+
+    monkeypatch.setattr(updater.os, "replace", replace_after_one_lock)
+    monkeypatch.setattr(updater.time, "sleep", lambda _seconds: None)
+
+    updater.copy_file_with_retry(source, destination)
+
+    assert calls == 2
+    assert destination.read_bytes() == b"new"
+    assert not list(tmp_path.glob(".destination.exe.update-*"))
+
+
+def test_copy_file_with_retry_reports_the_locked_file(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source.exe"
+    destination = tmp_path / "destination.exe"
+    source.write_bytes(b"new")
+    destination.write_bytes(b"old")
+    clock = iter((0.0, updater.FILE_REPLACE_TIMEOUT_SECONDS + 1.0))
+
+    def always_locked(_source_path, _destination_path):
+        error = OSError("sharing violation")
+        error.winerror = 32
+        raise error
+
+    monkeypatch.setattr(updater.os, "replace", always_locked)
+    monkeypatch.setattr(updater.time, "monotonic", lambda: next(clock))
+
+    with pytest.raises(updater.UpdateFileLockedError, match="destination.exe"):
+        updater.copy_file_with_retry(source, destination)
+
+
+def test_wait_for_process_exit_waits_until_parent_has_finished(monkeypatch) -> None:
+    states = iter((True, False))
+    monkeypatch.setattr(updater, "is_process_running", lambda _pid: next(states))
+    monkeypatch.setattr(updater.time, "sleep", lambda _seconds: None)
+
+    assert updater.wait_for_process_exit(123, timeout=1.0)

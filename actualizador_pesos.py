@@ -24,6 +24,9 @@ APP_NAME = "Etiquetado Pesos"
 LAUNCHER_EXE = "Etiquetado_Pesos.exe"
 LOCAL_VERSION_FILE = "version_local.json"
 HTTP_TIMEOUT_SECONDS = 20
+PROCESS_EXIT_TIMEOUT_SECONDS = 20
+FILE_REPLACE_TIMEOUT_SECONDS = 45
+FILE_REPLACE_RETRY_SECONDS = 1
 SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 UPDATE_LOG_FILE = (
     Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()))
@@ -32,6 +35,17 @@ UPDATE_LOG_FILE = (
     / "updater.log"
 )
 UPDATE_STATUS_FILE = UPDATE_LOG_FILE.parent / "update_status.json"
+
+
+class UpdateFileLockedError(RuntimeError):
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(
+            "No se pudo reemplazar el archivo actualizado porque sigue siendo usado por otro proceso:\n\n"
+            f"{path}\n\n"
+            f"El actualizador lo reintento durante {FILE_REPLACE_TIMEOUT_SECONDS} segundos. "
+            "Cierra cualquier instancia de Etiquetado Pesos y vuelve a intentarlo."
+        )
 
 
 def creation_flags() -> int:
@@ -115,6 +129,32 @@ def read_installed_version(install_dir: Path) -> str:
         return ""
 
 
+def is_process_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
+def wait_for_process_exit(pid: int, timeout: float = PROCESS_EXIT_TIMEOUT_SECONDS) -> bool:
+    if pid <= 0:
+        return True
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_process_running(pid):
+            log_update(f"Proceso previo finalizado: pid={pid}")
+            return True
+        time.sleep(0.25)
+    return not is_process_running(pid)
+
+
 def wait_for_installed_version(install_dir: Path, expected_version: str = "", timeout: float = 12.0) -> None:
     if not expected_version:
         return
@@ -179,12 +219,41 @@ def should_preserve(destination: Path, install_dir: Path) -> bool:
     return relative in preserved or relative.startswith("config/backups/") or relative.startswith("exportaciones/")
 
 
+def _is_file_lock_error(exc: OSError) -> bool:
+    return getattr(exc, "winerror", None) in {32, 33}
+
+
+def copy_file_with_retry(source: Path, destination: Path) -> None:
+    """Copy via a temporary sibling file, retrying Windows sharing violations."""
+    temporary = destination.with_name(f".{destination.name}.update-{uuid.uuid4().hex}")
+    try:
+        shutil.copy2(source, temporary)
+        deadline = time.monotonic() + FILE_REPLACE_TIMEOUT_SECONDS
+        while True:
+            try:
+                os.replace(temporary, destination)
+                return
+            except OSError as exc:
+                if not _is_file_lock_error(exc):
+                    raise RuntimeError(f"No se pudo reemplazar el archivo: {destination}\n\n{exc}") from exc
+                if time.monotonic() >= deadline:
+                    log_update(f"Archivo bloqueado tras reintentos: {destination}; error={exc}")
+                    raise UpdateFileLockedError(destination) from exc
+                log_update(f"Archivo bloqueado; se reintenta: {destination}; error={exc}")
+                time.sleep(FILE_REPLACE_RETRY_SECONDS)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def copy_file_preserving_user_data(source: Path, destination: Path, install_dir: Path) -> None:
     if should_preserve(destination, install_dir):
         log_update(f"Conservado archivo local: {destination}")
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
+    copy_file_with_retry(source, destination)
 
 
 def copy_tree_preserving_user_data(source_dir: Path, destination_dir: Path, install_dir: Path) -> None:
@@ -222,6 +291,7 @@ class UpdateWindow:
         expected_sha256: str,
         install_dir: Path,
         expected_version: str,
+        wait_for_pid: int = 0,
     ) -> None:
         self.package_type = package_type.lower().strip() or "zip"
         self.package_url = package_url
@@ -229,6 +299,7 @@ class UpdateWindow:
         self.expected_sha256 = expected_sha256.lower().strip()
         self.install_dir = install_dir
         self.expected_version = expected_version
+        self.wait_for_pid = max(int(wait_for_pid or 0), 0)
         self.error_text = ""
         self.finished_ok = False
         self.cancel_requested = threading.Event()
@@ -335,6 +406,14 @@ class UpdateWindow:
 
             self.post_status("Preparando archivos...")
             source_dir = safe_extract_zip(package, temp_dir)
+            if self.wait_for_pid:
+                self.post_status("Esperando a que finalice el lanzador anterior...")
+                log_update(f"Esperando proceso previo antes de copiar: pid={self.wait_for_pid}")
+                if not wait_for_process_exit(self.wait_for_pid):
+                    raise RuntimeError(
+                        "El lanzador anterior no se cerró a tiempo. "
+                        "La actualización se ha detenido para no dejar archivos bloqueados."
+                    )
             self.post_status("Aplicando la actualizacion...")
             copy_package_files(source_dir, self.install_dir)
 
@@ -366,6 +445,7 @@ class UpdateWindow:
                 package_type=self.package_type,
                 package_name=self.package_name,
                 package_url=self.package_url,
+                blocked_file=str(exc.path) if isinstance(exc, UpdateFileLockedError) else "",
             )
             self.root.after(0, self.show_error)
 
@@ -397,6 +477,10 @@ def main() -> int:
             messagebox.showerror(APP_NAME, "No se han recibido los datos del paquete de actualizacion.")
             return 1
         try:
+            wait_for_pid = 0
+            if "--wait-pid" in sys.argv[8:]:
+                index = sys.argv.index("--wait-pid", 8)
+                wait_for_pid = int(sys.argv[index + 1])
             return UpdateWindow(
                 package_type=sys.argv[2].strip(),
                 package_url=sys.argv[3].strip(),
@@ -404,6 +488,7 @@ def main() -> int:
                 expected_sha256=sys.argv[5].strip(),
                 install_dir=Path(sys.argv[6]).resolve(),
                 expected_version=str(sys.argv[7]).strip(),
+                wait_for_pid=wait_for_pid,
             ).run()
         except Exception as exc:
             messagebox.showerror(APP_NAME, f"No se pudo preparar la actualizacion:\n\n{exc}")

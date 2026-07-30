@@ -439,6 +439,8 @@ def start_package_update(
                 expected_sha256,
                 str(app_dir()),
                 str(expected_version),
+                "--wait-pid",
+                str(os.getpid()),
             ]
         else:
             args = [
@@ -451,6 +453,8 @@ def start_package_update(
                 expected_sha256,
                 str(app_dir()),
                 str(expected_version),
+                "--wait-pid",
+                str(os.getpid()),
             ]
         subprocess.Popen(
             args,
