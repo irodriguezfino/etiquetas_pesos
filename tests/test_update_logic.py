@@ -106,6 +106,19 @@ def test_access_denied_is_treated_as_a_retriable_file_lock() -> None:
     assert updater._is_file_lock_error(error)
 
 
+def test_local_salazon_csv_is_preserved_during_updates(tmp_path) -> None:
+    source = tmp_path / "package" / "config" / "config_salazon.csv"
+    destination = tmp_path / "installed" / "config" / "config_salazon.csv"
+    source.parent.mkdir(parents=True)
+    destination.parent.mkdir(parents=True)
+    source.write_text("CODIGO;Nombre\n100;CATALOGO PUBLICADO\n", encoding="utf-8")
+    destination.write_text("CODIGO;Nombre\n200;CATALOGO LOCAL\n", encoding="utf-8")
+
+    updater.copy_file_preserving_user_data(source, destination, destination.parents[1])
+
+    assert destination.read_text(encoding="utf-8") == "CODIGO;Nombre\n200;CATALOGO LOCAL\n"
+
+
 def test_wait_for_process_exit_waits_until_parent_has_finished(monkeypatch) -> None:
     states = iter((True, False))
     monkeypatch.setattr(updater, "is_process_running", lambda _pid: next(states))

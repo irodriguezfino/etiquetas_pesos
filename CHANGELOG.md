@@ -2,6 +2,10 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.10] - 2026-07-30
+
+- Automatic updates now preserve the local `config_salazon.csv` catalogue, matching the installer behaviour.
+
 ## [1.0.9] - 2026-07-30
 
 - The updater now waits for both the application and launcher processes, then closes residual application instances before replacing executables.

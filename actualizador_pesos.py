@@ -214,6 +214,7 @@ def should_preserve(destination: Path, install_dir: Path) -> bool:
     preserved = {
         "config_usuario.json",
         "update_config.json",
+        "config/config_salazon.csv",
         "config/plantilla_etiqueta_pesos.json",
         "config/editor_password.txt",
     }
