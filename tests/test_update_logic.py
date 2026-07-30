@@ -132,6 +132,7 @@ def test_launcher_passes_application_and_launcher_pids_to_updater(monkeypatch, t
     updater_path = tmp_path / "Etiquetado_Pesos_Updater.exe"
     monkeypatch.setattr(launcher, "wait_for_process_exit", lambda _pid, **_kwargs: True)
     monkeypatch.setattr(launcher, "copy_updater_to_temp", lambda: updater_path)
+    monkeypatch.setattr(launcher, "terminate_main_application_instances", lambda: True)
     monkeypatch.setattr(launcher, "write_update_status", lambda **_values: None)
     monkeypatch.setattr(launcher, "log_update_check", lambda _message: None)
     monkeypatch.setattr(launcher.os, "getpid", lambda: 456)
@@ -144,3 +145,19 @@ def test_launcher_passes_application_and_launcher_pids_to_updater(monkeypatch, t
 
     assert launcher.start_package_update("zip", "https://example.test/update.zip", "update.zip", "a" * 64, "1.0.9", app_pid=123) == 0
     assert received[-4:] == ["--wait-pid", "123", "--wait-pid", "456"]
+
+
+def test_launcher_checks_for_updates_before_opening_main_application(monkeypatch) -> None:
+    monkeypatch.setattr(launcher.sys, "argv", ["Etiquetado_Pesos.exe"])
+    monkeypatch.setattr(launcher, "check_and_update", lambda **_kwargs: True)
+    monkeypatch.setattr(launcher, "launch_main", lambda: pytest.fail("La aplicacion no debe abrirse antes de actualizar."))
+
+    assert launcher.main() == 0
+
+
+def test_launcher_opens_main_application_when_no_update_is_available(monkeypatch) -> None:
+    monkeypatch.setattr(launcher.sys, "argv", ["Etiquetado_Pesos.exe"])
+    monkeypatch.setattr(launcher, "check_and_update", lambda **_kwargs: False)
+    monkeypatch.setattr(launcher, "launch_main", lambda: object())
+
+    assert launcher.main() == 0

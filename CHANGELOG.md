@@ -2,6 +2,11 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.11] - 2026-07-30
+
+- The launcher now checks and applies automatic updates before starting the main application, preventing executable locks.
+- Manual updates force-close and verify every main-application instance before starting the updater.
+
 ## [1.0.10] - 2026-07-30
 
 - Automatic updates now preserve the local `config_salazon.csv` catalogue, matching the installer behaviour.

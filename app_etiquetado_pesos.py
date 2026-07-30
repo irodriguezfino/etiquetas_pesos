@@ -208,7 +208,6 @@ class EtiquetadoPesosApp(tk.Tk):
         self._bind_shortcuts()
         center_window(self)
         self.after(100, self._refresh_ranges_for_article)
-        self.after(4500, self._check_updates_auto)
 
     def _load_state(self) -> None:
         if not STATE_PATH.exists():

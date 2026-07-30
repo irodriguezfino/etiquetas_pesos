@@ -392,6 +392,45 @@ def terminate_process(pid: int) -> None:
         pass
 
 
+def main_application_instances_running() -> bool:
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"IMAGENAME eq {MAIN_EXE}", "/FO", "CSV", "/NH"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            creationflags=creation_flags(),
+        )
+        return MAIN_EXE.casefold() in result.stdout.casefold()
+    except OSError:
+        return False
+
+
+def terminate_main_application_instances(timeout_seconds: float = 10.0) -> bool:
+    """Force-close every installed main-app instance before an update starts."""
+    try:
+        result = subprocess.run(
+            ["taskkill", "/IM", MAIN_EXE, "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            creationflags=creation_flags(),
+        )
+        log_update_check(f"Cierre global de aplicacion: image={MAIN_EXE}; exit_code={result.returncode}")
+    except OSError as exc:
+        log_update_check(f"No se pudo solicitar el cierre global: {exc}")
+        return False
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if not main_application_instances_running():
+            return True
+        time.sleep(0.25)
+    return not main_application_instances_running()
+
+
 def copy_updater_to_temp() -> Path:
     root = app_dir()
     temp_root = Path(tempfile.gettempdir()) / "Etiquetado_Pesos_Update"
@@ -428,6 +467,8 @@ def start_package_update(
             if not wait_for_process_exit(app_pid):
                 terminate_process(app_pid)
                 wait_for_process_exit(app_pid, timeout_seconds=5.0)
+        if not terminate_main_application_instances():
+            raise RuntimeError("No se pudieron cerrar todas las instancias de Etiquetado Pesos antes de actualizar.")
         updater_path = copy_updater_to_temp()
         if updater_path.suffix.lower() == ".exe":
             args = [
@@ -647,12 +688,9 @@ def main() -> int:
             check_and_update(manual=False, app_pid=app_pid)
             return 0
 
-        process = launch_main()
-        if process is None:
-            return 1
-        time.sleep(4.0)
-        check_and_update(manual=False, app_pid=process.pid)
-        return 0
+        if check_and_update(manual=False):
+            return 0
+        return 0 if launch_main() else 1
     except Exception as exc:
         show_warning(
             APP_NAME,
