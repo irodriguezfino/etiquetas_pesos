@@ -99,9 +99,35 @@ def test_copy_file_with_retry_reports_the_locked_file(tmp_path, monkeypatch) -> 
         updater.copy_file_with_retry(source, destination)
 
 
+def test_access_denied_is_treated_as_a_retriable_file_lock() -> None:
+    error = OSError("access denied")
+    error.winerror = 5
+
+    assert updater._is_file_lock_error(error)
+
+
 def test_wait_for_process_exit_waits_until_parent_has_finished(monkeypatch) -> None:
     states = iter((True, False))
     monkeypatch.setattr(updater, "is_process_running", lambda _pid: next(states))
     monkeypatch.setattr(updater.time, "sleep", lambda _seconds: None)
 
     assert updater.wait_for_process_exit(123, timeout=1.0)
+
+
+def test_launcher_passes_application_and_launcher_pids_to_updater(monkeypatch, tmp_path) -> None:
+    received: list[str] = []
+    updater_path = tmp_path / "Etiquetado_Pesos_Updater.exe"
+    monkeypatch.setattr(launcher, "wait_for_process_exit", lambda _pid, **_kwargs: True)
+    monkeypatch.setattr(launcher, "copy_updater_to_temp", lambda: updater_path)
+    monkeypatch.setattr(launcher, "write_update_status", lambda **_values: None)
+    monkeypatch.setattr(launcher, "log_update_check", lambda _message: None)
+    monkeypatch.setattr(launcher.os, "getpid", lambda: 456)
+
+    def capture_popen(args, **_kwargs):
+        received.extend(args)
+        return None
+
+    monkeypatch.setattr(launcher.subprocess, "Popen", capture_popen)
+
+    assert launcher.start_package_update("zip", "https://example.test/update.zip", "update.zip", "a" * 64, "1.0.9", app_pid=123) == 0
+    assert received[-4:] == ["--wait-pid", "123", "--wait-pid", "456"]

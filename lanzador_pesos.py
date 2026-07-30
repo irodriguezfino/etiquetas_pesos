@@ -427,7 +427,7 @@ def start_package_update(
             log_update_check(f"Cerrando aplicacion antes de actualizar: pid={app_pid}")
             if not wait_for_process_exit(app_pid):
                 terminate_process(app_pid)
-                time.sleep(0.75)
+                wait_for_process_exit(app_pid, timeout_seconds=5.0)
         updater_path = copy_updater_to_temp()
         if updater_path.suffix.lower() == ".exe":
             args = [
@@ -439,6 +439,8 @@ def start_package_update(
                 expected_sha256,
                 str(app_dir()),
                 str(expected_version),
+                "--wait-pid",
+                str(app_pid),
                 "--wait-pid",
                 str(os.getpid()),
             ]
@@ -453,6 +455,8 @@ def start_package_update(
                 expected_sha256,
                 str(app_dir()),
                 str(expected_version),
+                "--wait-pid",
+                str(app_pid),
                 "--wait-pid",
                 str(os.getpid()),
             ]

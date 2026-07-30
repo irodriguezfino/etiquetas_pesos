@@ -2,6 +2,11 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.9] - 2026-07-30
+
+- The updater now waits for both the application and launcher processes, then closes residual application instances before replacing executables.
+- Access denied (`WinError 5`) is retried as a temporary file lock, alongside Windows sharing violations.
+
 ## [1.0.8] - 2026-07-30
 
 - Article options with identical names and percentages now include their article code, so each cloned article selects only its own weight ranges.

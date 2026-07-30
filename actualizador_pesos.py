@@ -22,6 +22,7 @@ from tkinter import messagebox, ttk
 
 APP_NAME = "Etiquetado Pesos"
 LAUNCHER_EXE = "Etiquetado_Pesos.exe"
+MAIN_EXE = "Etiquetado_Pesos_App.exe"
 LOCAL_VERSION_FILE = "version_local.json"
 HTTP_TIMEOUT_SECONDS = 20
 PROCESS_EXIT_TIMEOUT_SECONDS = 20
@@ -220,7 +221,22 @@ def should_preserve(destination: Path, install_dir: Path) -> bool:
 
 
 def _is_file_lock_error(exc: OSError) -> bool:
-    return getattr(exc, "winerror", None) in {32, 33}
+    return getattr(exc, "winerror", None) in {5, 32, 33}
+
+
+def terminate_remaining_main_processes() -> None:
+    """Close residual application instances before replacing the installed executable."""
+    try:
+        result = subprocess.run(
+            ["taskkill", "/IM", MAIN_EXE, "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            creationflags=creation_flags(),
+        )
+        log_update(f"Cierre de instancias residuales: image={MAIN_EXE}; exit_code={result.returncode}")
+    except OSError as exc:
+        log_update(f"No se pudieron cerrar instancias residuales: {exc}")
 
 
 def copy_file_with_retry(source: Path, destination: Path) -> None:
@@ -291,7 +307,7 @@ class UpdateWindow:
         expected_sha256: str,
         install_dir: Path,
         expected_version: str,
-        wait_for_pid: int = 0,
+        wait_for_pids: tuple[int, ...] = (),
     ) -> None:
         self.package_type = package_type.lower().strip() or "zip"
         self.package_url = package_url
@@ -299,7 +315,7 @@ class UpdateWindow:
         self.expected_sha256 = expected_sha256.lower().strip()
         self.install_dir = install_dir
         self.expected_version = expected_version
-        self.wait_for_pid = max(int(wait_for_pid or 0), 0)
+        self.wait_for_pids = tuple(pid for pid in wait_for_pids if pid > 0)
         self.error_text = ""
         self.finished_ok = False
         self.cancel_requested = threading.Event()
@@ -406,14 +422,17 @@ class UpdateWindow:
 
             self.post_status("Preparando archivos...")
             source_dir = safe_extract_zip(package, temp_dir)
-            if self.wait_for_pid:
+            for pid in self.wait_for_pids:
                 self.post_status("Esperando a que finalice el lanzador anterior...")
-                log_update(f"Esperando proceso previo antes de copiar: pid={self.wait_for_pid}")
-                if not wait_for_process_exit(self.wait_for_pid):
+                log_update(f"Esperando proceso previo antes de copiar: pid={pid}")
+                if not wait_for_process_exit(pid):
                     raise RuntimeError(
-                        "El lanzador anterior no se cerró a tiempo. "
+                        "El proceso anterior no se cerró a tiempo. "
                         "La actualización se ha detenido para no dejar archivos bloqueados."
                     )
+            self.post_status("Cerrando instancias residuales...")
+            terminate_remaining_main_processes()
+            time.sleep(1)
             self.post_status("Aplicando la actualizacion...")
             copy_package_files(source_dir, self.install_dir)
 
@@ -477,10 +496,11 @@ def main() -> int:
             messagebox.showerror(APP_NAME, "No se han recibido los datos del paquete de actualizacion.")
             return 1
         try:
-            wait_for_pid = 0
-            if "--wait-pid" in sys.argv[8:]:
-                index = sys.argv.index("--wait-pid", 8)
-                wait_for_pid = int(sys.argv[index + 1])
+            wait_for_pids = tuple(
+                int(sys.argv[index + 1])
+                for index, argument in enumerate(sys.argv[8:], start=8)
+                if argument == "--wait-pid" and index + 1 < len(sys.argv)
+            )
             return UpdateWindow(
                 package_type=sys.argv[2].strip(),
                 package_url=sys.argv[3].strip(),
@@ -488,7 +508,7 @@ def main() -> int:
                 expected_sha256=sys.argv[5].strip(),
                 install_dir=Path(sys.argv[6]).resolve(),
                 expected_version=str(sys.argv[7]).strip(),
-                wait_for_pid=wait_for_pid,
+                wait_for_pids=wait_for_pids,
             ).run()
         except Exception as exc:
             messagebox.showerror(APP_NAME, f"No se pudo preparar la actualizacion:\n\n{exc}")
