@@ -472,7 +472,9 @@ class LabelTemplateEditor(tk.Toplevel):
         ("Articulo", "articulo_nombre"),
     )
 
-    def __init__(self, master, on_saved=None, sample_box_provider=None, printer_provider=None) -> None:
+    def __init__(self, master, on_saved=None, sample_box_provider=None, printer_provider=None,
+                 template_loader=None, template_saver=None, template_resetter=None,
+                 template_path: Path | None = None, sample_renderer=None, test_printer=None) -> None:
         super().__init__(master)
         self.withdraw()
         try:
@@ -487,7 +489,13 @@ class LabelTemplateEditor(tk.Toplevel):
         self.on_saved = on_saved
         self.sample_box_provider = sample_box_provider
         self.printer_provider = printer_provider
-        self.template = normalize_template_to_safe_area(load_label_template())
+        self.template_path = Path(template_path or LABEL_TEMPLATE_PATH)
+        self.template_loader = template_loader or load_label_template
+        self.template_saver = template_saver or save_label_template
+        self.template_resetter = template_resetter or reset_label_template
+        self.sample_renderer = sample_renderer
+        self.test_printer = test_printer
+        self.template = normalize_template_to_safe_area(self.template_loader())
         self.selected_index: int | None = None
         self.hover_index: int | None = None
         self.drag_start: tuple[int, int] | None = None
@@ -545,7 +553,7 @@ class LabelTemplateEditor(tk.Toplevel):
         self.variable_label_choices = ("",) + tuple(self._variable_label(item) for item in self.VARIABLE_CHOICES)
         self.field_preset_labels = tuple(item[0] for item in self.FIELD_PRESETS)
         self.var_field_preset = tk.StringVar(value=self.field_preset_labels[0])
-        self.status = tk.StringVar(value=f"Plantilla: {LABEL_TEMPLATE_PATH}")
+        self.status = tk.StringVar(value=f"Plantilla: {self.template_path}")
         self.selection_info = tk.StringVar(value="Selecciona un elemento de la lista o de la vista previa.")
         self.used_fields_info = tk.StringVar(value="Variables usadas: -")
         self.template_state = tk.StringVar(value="Estado plantilla: pendiente")
@@ -790,7 +798,7 @@ class LabelTemplateEditor(tk.Toplevel):
             return "break"
         backup_note = ""
         try:
-            backup_dir = LABEL_TEMPLATE_PATH.parent / "backups"
+            backup_dir = self.template_path.parent / "backups"
             backup_dir.mkdir(parents=True, exist_ok=True)
             backup_path = backup_dir / f"plantilla_etiqueta_backup_antes_tamano_{datetime.now():%Y%m%d_%H%M%S}.json"
             backup_path.write_text(json.dumps(self.template, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -2248,7 +2256,7 @@ Lienzo de etiqueta
             if not messagebox.askyesno("Validacion de plantilla", f"Se han detectado avisos:\n\n{detail}\n\n¿Guardar igualmente?", parent=self):
                 self.status.set("Guardado cancelado por validacion.")
                 return "break"
-        path = save_label_template(self.template)
+        path = self.template_saver(self.template)
         self.saved_snapshot = self._snapshot()
         self.status.set(f"Plantilla guardada: {path}")
         self.form_pending = False
@@ -2273,7 +2281,7 @@ Lienzo de etiqueta
 
     def save_template_as(self) -> str:
         self.apply_changes(push_undo=False)
-        selected = filedialog.asksaveasfilename(parent=self, title="Exportar copia de plantilla", initialdir=str(LABEL_TEMPLATE_PATH.parent), defaultextension=".json", filetypes=[("Plantilla JSON", "*.json")], initialfile="plantilla_etiqueta_copia.json")
+        selected = filedialog.asksaveasfilename(parent=self, title="Exportar copia de plantilla", initialdir=str(self.template_path.parent), defaultextension=".json", filetypes=[("Plantilla JSON", "*.json")], initialfile="plantilla_etiqueta_copia.json")
         if not selected:
             return "break"
         Path(selected).write_text(json.dumps(self.template, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -2282,7 +2290,7 @@ Lienzo de etiqueta
         return "break"
 
     def restore_latest_backup(self) -> str:
-        backup_dir = LABEL_TEMPLATE_PATH.parent / "backups"
+        backup_dir = self.template_path.parent / "backups"
         backups = sorted(backup_dir.glob("plantilla_etiqueta_backup_*.json"), key=lambda item: item.stat().st_mtime, reverse=True) if backup_dir.exists() else []
         if not backups:
             messagebox.showinfo("Sin copias", "No hay copias de seguridad de plantilla disponibles.", parent=self)
@@ -2321,7 +2329,10 @@ Lienzo de etiqueta
         if not messagebox.askyesno("Imprimir prueba", f"Se enviara 1 etiqueta de prueba a:\n\n{printer}\n\nUsara el diseño actual del editor, aunque no este guardado. ¿Continuar?", parent=self):
             return "break"
         try:
-            printed = print_labels_windows([replace(self._sample_box(), etiquetas=1)], printer, template=self.template)
+            if callable(self.test_printer):
+                printed = self.test_printer(printer, self.template)
+            else:
+                printed = print_labels_windows([replace(self._sample_box(), etiquetas=1)], printer, template=self.template)
         except Exception as exc:
             messagebox.showerror("No se pudo imprimir", str(exc), parent=self)
             return "break"
@@ -2329,7 +2340,7 @@ Lienzo de etiqueta
         return "break"
 
     def load_template_file(self) -> str:
-        selected = filedialog.askopenfilename(parent=self, title="Cargar plantilla", initialdir=str(LABEL_TEMPLATE_PATH.parent), filetypes=[("Plantilla JSON", "*.json")])
+        selected = filedialog.askopenfilename(parent=self, title="Cargar plantilla", initialdir=str(self.template_path.parent), filetypes=[("Plantilla JSON", "*.json")])
         if not selected:
             return "break"
         try:
@@ -2352,8 +2363,8 @@ Lienzo de etiqueta
         if not messagebox.askyesno("Restaurar plantilla", "Se restaurara el diseno por defecto. ¿Continuar?", parent=self):
             return "break"
         self._push_undo()
-        reset_label_template()
-        self.template = normalize_template_to_safe_area(load_label_template())
+        self.template_resetter()
+        self.template = normalize_template_to_safe_area(self.template_loader())
         self._populate_elements()
         self._select_first_editable()
         self._draw_preview()
@@ -2828,19 +2839,24 @@ Lienzo de etiqueta
         element["x"] = int(element.get("x", 0)) + dx
         element["y"] = int(element.get("y", 0)) + dy
 
+    def _render_sample(self, dpi: int):
+        if callable(self.sample_renderer):
+            return self.sample_renderer(self.template, dpi)
+        return render_label(self._sample_box(), dpi=dpi, template=self.template)
+
     def _draw_preview(self) -> None:
         if not hasattr(self, "preview_canvas"):
             return
         self.update_idletasks()
         zoom_text = self.var_zoom.get()
         if zoom_text == "Ajustar":
-            image = render_label(self._sample_box(), dpi=120, template=self.template)
+            image = self._render_sample(dpi=120)
             max_w = max(self.preview_canvas.winfo_width() - 36, 360)
             max_h = max(self.preview_canvas.winfo_height() - 36, 520)
             image.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
         else:
             factor = int(zoom_text.rstrip("%")) / 100
-            image = render_label(self._sample_box(), dpi=max(int(300 * factor), 40), template=self.template)
+            image = self._render_sample(dpi=max(int(300 * factor), 40))
         self.preview_scale = image.width / self._base_width()
         self.preview_photo = ImageTk.PhotoImage(image)
         self.preview_canvas.delete("all")

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
+
+import certifi
 
 
 APP_NAME = "Etiquetado Pesos"
@@ -27,6 +30,7 @@ DEFAULT_VERSION_URL = "https://raw.githubusercontent.com/irodriguezfino/etiqueta
 DEFAULT_GITHUB_OWNER = "irodriguezfino"
 DEFAULT_GITHUB_REPO = "etiquetas_pesos"
 HTTP_TIMEOUT_SECONDS = 20
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 UPDATE_LOG_FILE = (
     Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()))
@@ -111,7 +115,7 @@ def read_json_url(url: str) -> dict:
                 "Accept": "application/vnd.github+json,application/json,text/plain,*/*",
             },
         )
-        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS, context=SSL_CONTEXT) as response:
             raw = response.read(4 * 1024 * 1024)
         data = json.loads(raw.decode("utf-8-sig"))
         return data if isinstance(data, dict) else {}
@@ -129,7 +133,7 @@ def read_json_list_url(url: str) -> list[dict]:
                 "Accept": "application/vnd.github+json,application/json,*/*",
             },
         )
-        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS, context=SSL_CONTEXT) as response:
             raw = response.read(4 * 1024 * 1024)
         data = json.loads(raw.decode("utf-8-sig"))
         return data if isinstance(data, list) else []
@@ -147,7 +151,7 @@ def read_text_url(url: str, max_bytes: int = 128 * 1024) -> str:
                 "Accept": "text/plain,application/json,*/*",
             },
         )
-        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
+        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS, context=SSL_CONTEXT) as response:
             return response.read(max_bytes).decode("utf-8-sig", errors="replace")
     except (HTTPError, URLError, TimeoutError, UnicodeDecodeError, OSError) as exc:
         log_update_check(f"No se pudo leer recurso remoto: {exc}")

@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -88,6 +88,7 @@ class BoxEtiqueta:
     albaran: str = ""
     partida: str = ""
     rango_pesos: str = ""
+    porcentaje: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,11 +100,15 @@ class RangoSalazon:
     dias_sal: int
     unidades_box: int | None = None
     rango_texto: str = ""
+    porcentaje: str = ""
+    articulo_nombre_original: str = ""
 
     @property
     def range_label(self) -> str:
         if self.rango_texto:
             return self.rango_texto
+        if self.rango_min == 0 and self.rango_max == 0:
+            return ""
         return f"{format_decimal(self.rango_min)} - {format_decimal(self.rango_max)} kg"
 
 
@@ -186,9 +191,39 @@ def _first_csv_value(row: dict[str, str], keys: tuple[str, ...]) -> str:
     return ""
 
 
-def _extract_weight_range_values(name: str) -> tuple[float, float, str]:
-    text = str(name or "").strip()
-    matches = list(re.finditer(r"(\d+(?:[,.]\d+)?)\s*-\s*(\d+(?:[,.]\d+)?)", text))
+_PERCENTAGE_PATTERN = re.compile(r"(?<!\d)(\d+(?:[,.]\d+)?)\s*%")
+_WEIGHT_RANGE_PATTERN = re.compile(
+    r"(\d+(?:[,.]\d+)?)\s*(?:-|\u2013|\u2014|\u00e2\u20ac\u201c)\s*(\d+(?:[,.]\d+)?)(?:\s*(?:kg|kgs|kilos)\b)?",
+    re.IGNORECASE,
+)
+_WEIGHT_BOUND_PATTERN = re.compile(
+    r"(?P<bound><|\+|>)\s*(?P<weight>\d+(?:[,.]\d+)?)(?:\s*(?:kg|kgs|kilos)\b)?",
+    re.IGNORECASE,
+)
+
+
+def _clean_article_text(value: str) -> str:
+    return re.sub(r"\s{2,}", " ", str(value or "").strip())
+
+
+def _normalise_percentage(value: str, *, allow_number: bool = False) -> str:
+    text = str(value or "").strip()
+    match = _PERCENTAGE_PATTERN.search(text)
+    if not match and allow_number:
+        match = re.fullmatch(r"\s*(\d+(?:[,.]\d+)?)\s*", text)
+    if not match:
+        return ""
+    return f"{format_decimal(parse_decimal(match.group(1)))}%"
+
+
+def extract_article_percentage(text: str) -> str:
+    """Return the first percentage embedded in an article description, if present."""
+    return _normalise_percentage(text)
+
+
+def _extract_weight_range_values(text: str) -> tuple[float, float, str]:
+    text = _clean_article_text(text)
+    matches = list(_WEIGHT_RANGE_PATTERN.finditer(text))
     if matches:
         match = matches[-1]
         min_weight = parse_decimal(match.group(1))
@@ -196,6 +231,13 @@ def _extract_weight_range_values(name: str) -> tuple[float, float, str]:
         if min_weight > max_weight:
             min_weight, max_weight = max_weight, min_weight
         return min_weight, max_weight, f"{format_decimal(min_weight)} - {format_decimal(max_weight)} kg"
+    bound_matches = list(_WEIGHT_BOUND_PATTERN.finditer(text))
+    if bound_matches:
+        match = bound_matches[-1]
+        weight = parse_decimal(match.group("weight"))
+        if match.group("bound") == "<":
+            return 0.0, weight, f"< {format_decimal(weight)} kg"
+        return weight, 999.0, f"> {format_decimal(weight)} kg"
     less_match = re.search(r"(?:^|\s)<\s*(\d+(?:[,.]\d+)?)\s*(?:kg|kgs|kilos)?\s*$", text, re.IGNORECASE)
     if less_match:
         max_weight = parse_decimal(less_match.group(1))
@@ -204,21 +246,51 @@ def _extract_weight_range_values(name: str) -> tuple[float, float, str]:
     if greater_match:
         min_weight = parse_decimal(greater_match.group(1))
         return min_weight, 999.0, f"> {format_decimal(min_weight)} kg"
-    raise ValueError(f"No se encontro rango de peso en el nombre de articulo: {name}")
+    raise ValueError(f"No se encontro rango de peso en el nombre de articulo: {text}")
+
+
+def extract_weight_range(text: str) -> str:
+    """Return a normalised weight range, accepting common dashes and decimals."""
+    try:
+        return _extract_weight_range_values(text)[2]
+    except ValueError:
+        return ""
 
 
 def article_name_without_weight_range(name: str) -> str:
-    text = str(name or "").strip()
-    matches = list(re.finditer(r"(?:\d+(?:[,.]\d+)?\s*-\s*\d+(?:[,.]\d+)?|[<+>]\s*\d+(?:[,.]\d+)?)", text))
+    """Remove the weight range from an article description, preserving its percentage."""
+    text = _clean_article_text(name)
+    matches = [*_WEIGHT_RANGE_PATTERN.finditer(text), *_WEIGHT_BOUND_PATTERN.finditer(text)]
     if not matches:
         return text
     match = matches[-1]
     prefix = text[: match.start()].rstrip()
     suffix = text[match.end() :].strip()
-    suffix = re.sub(r"^(?:kg|kgs|kilos)\b\.?", "", suffix, flags=re.IGNORECASE).strip()
     clean = f"{prefix} {suffix}".strip()
     clean = re.sub(r"\s{2,}", " ", clean).strip(" -;")
     return clean or text
+
+
+def article_base_name(name: str) -> str:
+    """Return an article name without its percentage or weight range."""
+    without_range = article_name_without_weight_range(name)
+    clean = _PERCENTAGE_PATTERN.sub("", without_range)
+    return _clean_article_text(clean).strip(" -;\u2014")
+
+
+def group_salazon_records(ranges: Iterable[RangoSalazon]) -> dict[tuple[str, str], tuple[RangoSalazon, ...]]:
+    """Group ranges by stable code and normalised base name without merging similar products."""
+    grouped: dict[tuple[str, str], list[RangoSalazon]] = {}
+    for item in ranges:
+        key = (normalize_article_code(item.articulo_codigo), article_base_name(item.articulo_nombre).casefold())
+        grouped.setdefault(key, []).append(item)
+    return {key: tuple(items) for key, items in grouped.items()}
+
+
+def unique_article_percentages(records: Iterable[RangoSalazon]) -> list[str]:
+    """Return the distinct, numerically ordered percentages represented by product records."""
+    values = {item.porcentaje for item in records if item.porcentaje}
+    return sorted(values, key=lambda value: (parse_decimal(value.rstrip("%")), value))
 
 
 def load_salazon_ranges(path: Path = SALAZON_CONFIG_PATH) -> tuple[RangoSalazon, ...]:
@@ -236,6 +308,8 @@ def load_salazon_ranges(path: Path = SALAZON_CONFIG_PATH) -> tuple[RangoSalazon,
                     clean_row = {_csv_key(str(key or "")): str(value or "").strip() for key, value in row.items()}
                     code = _first_csv_value(clean_row, ("codigofac", "codigo", "numero", "articulo", "numeroarticulo", "codigoarticulo"))
                     name = _first_csv_value(clean_row, ("nombredelproducto", "nombreproducto", "nombre", "nombrearticulo", "descripcion"))
+                    percentage_text = _first_csv_value(clean_row, ("porcentaje", "porc", "porciento", "pureza"))
+                    weight_range_text = _first_csv_value(clean_row, ("rangopeso", "rangodepeso", "rango", "pesorange", "rangokg"))
                     days_text = _first_csv_value(clean_row, ("diassal", "dias", "diassalazon", "diasensal"))
                     units_text = _first_csv_value(clean_row, ("unidadesbox", "unidadesporbox", "unidades", "udsbox", "uds"))
                 else:
@@ -243,23 +317,33 @@ def load_salazon_ranges(path: Path = SALAZON_CONFIG_PATH) -> tuple[RangoSalazon,
                         continue
                     code = str(row[0]).strip()
                     name = str(row[1]).strip()
+                    percentage_text = ""
+                    weight_range_text = ""
                     days_text = str(row[2]).strip() if len(row) >= 3 else "0"
                     units_text = str(row[3]).strip() if len(row) >= 4 else ""
                 if not code or not name:
                     continue
-                min_weight, max_weight, range_label = _extract_weight_range_values(name)
+                percentage = _normalise_percentage(percentage_text, allow_number=True) or extract_article_percentage(name)
+                range_source = weight_range_text or name
+                try:
+                    min_weight, max_weight, range_label = _extract_weight_range_values(range_source)
+                except ValueError:
+                    min_weight, max_weight, range_label = 0.0, 0.0, ""
+                base_name = article_base_name(name)
                 units_value = None
                 if units_text:
                     units_value = max(1, int(float(units_text.replace(",", "."))))
                 ranges.append(
                     RangoSalazon(
                         articulo_codigo=normalize_article_code(code),
-                        articulo_nombre=name,
+                        articulo_nombre=base_name,
                         rango_min=min_weight,
                         rango_max=max_weight,
                         dias_sal=int(float((days_text or "0").replace(",", "."))),
                         unidades_box=units_value,
                         rango_texto=range_label,
+                        porcentaje=percentage,
+                        articulo_nombre_original=name,
                     )
                 )
             except Exception as exc:
@@ -296,22 +380,18 @@ def unique_article_options(path: Path = SALAZON_CONFIG_PATH) -> list[tuple[str, 
     ranges = load_salazon_ranges(path)
     if ranges:
         result: list[tuple[str, str, str]] = []
-        seen: set[tuple[str, str]] = set()
-        for item in sorted(
-            ranges,
-            key=lambda item: (
-                _article_code_priority_key(item.articulo_codigo),
-                article_name_without_weight_range(item.articulo_nombre),
-                item.rango_min,
-                item.rango_max,
+        for (_code_key, _name_key), records in sorted(
+            group_salazon_records(ranges).items(),
+            key=lambda entry: (
+                _article_code_priority_key(entry[1][0].articulo_codigo),
+                entry[1][0].articulo_nombre.casefold(),
             ),
         ):
-            name = article_name_without_weight_range(item.articulo_nombre)
-            key = (item.articulo_codigo, name.lower())
-            if key in seen:
-                continue
-            seen.add(key)
-            result.append((item.articulo_codigo, name, name))
+            first = records[0]
+            name = first.articulo_nombre
+            percentages = unique_article_percentages(records)
+            display = f"{name} \u2014 {', '.join(percentages)}" if percentages else name
+            result.append((first.articulo_codigo, name, display))
         return result
     return article_options(path)
 
@@ -325,13 +405,6 @@ def salazon_ranges_for_article(article_code: str, ranges: Iterable[RangoSalazon]
 
 def save_salazon_range_units(path: Path, target: RangoSalazon, units_per_box: int) -> None:
     raise RuntimeError("La aplicacion de pesos no modifica config_salazon.csv desde el editor.")
-
-
-def extract_weight_range(text: str) -> str:
-    try:
-        return _extract_weight_range_values(text)[2]
-    except Exception:
-        return ""
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -482,8 +555,21 @@ def reset_label_template() -> Path:
     return save_label_template(normalize_template_to_safe_area(DEFAULT_LABEL_TEMPLATE))
 
 
+class _SafeFormatDict(dict):
+    """Format-map that renders missing template values as empty strings."""
+
+    def __missing__(self, _key: str) -> str:
+        return ""
+
+
+def _format_values(values: Mapping[str, object]) -> _SafeFormatDict:
+    return _SafeFormatDict({str(key): "" if value is None else value for key, value in values.items()})
+
+
 def _label_values(box: BoxEtiqueta) -> dict[str, str]:
-    rango = getattr(box, "rango_pesos", "") or f"{format_decimal(box.rango_min)} - {format_decimal(box.rango_max)} kg"
+    rango = getattr(box, "rango_pesos", "")
+    if not rango and (box.rango_min != 0 or box.rango_max != 0):
+        rango = f"{format_decimal(box.rango_min)} - {format_decimal(box.rango_max)} kg"
     albaran = str(getattr(box, "albaran", "") or "").strip()
     partida = str(getattr(box, "partida", "") or box.lote).strip()
     return {
@@ -501,6 +587,8 @@ def _label_values(box: BoxEtiqueta) -> dict[str, str]:
         "articulo_codigo": box.articulo_codigo,
         "articulo_nombre": box.articulo_nombre,
         "articulo": box.articulo_nombre,
+        "porcentaje": box.porcentaje,
+        "percentage": box.porcentaje,
         "total_piezas_rango": str(box.total_piezas_rango),
         "unidades": str(box.unidades),
         "dias_sal": str(box.dias_sal),
@@ -514,14 +602,21 @@ def _label_values(box: BoxEtiqueta) -> dict[str, str]:
     }
 
 
-def render_label(box: BoxEtiqueta, dpi: int = DEFAULT_DPI, template: dict | None = None) -> Image.Image:
-    width = int(LABEL_WIDTH_MM / 25.4 * dpi)
-    height = int(LABEL_HEIGHT_MM / 25.4 * dpi)
+def render_template(values: Mapping[str, object], dpi: int = DEFAULT_DPI, template: dict | None = None) -> Image.Image:
+    """Render a label template using arbitrary values.
+
+    This is the shared rendering entry point. ``render_label`` remains as the
+    backwards-compatible adapter used by Etiquetado Pesos.
+    """
     template = template or load_label_template()
+    label_width_mm = float(template.get("label_width_mm", LABEL_WIDTH_MM) or LABEL_WIDTH_MM)
+    label_height_mm = float(template.get("label_height_mm", LABEL_HEIGHT_MM) or LABEL_HEIGHT_MM)
+    width = max(1, int(label_width_mm / 25.4 * dpi))
+    height = max(1, int(label_height_mm / 25.4 * dpi))
     image = Image.new("RGB", (width, height), template.get("background", "white"))
     draw = ImageDraw.Draw(image)
     base_width = int(template.get("base_width", BASE_LABEL_WIDTH) or BASE_LABEL_WIDTH)
-    scale = width / base_width
+    scale = width / max(base_width, 1)
 
     def s(value) -> int:
         return int(float(value) * scale)
@@ -592,18 +687,21 @@ def render_label(box: BoxEtiqueta, dpi: int = DEFAULT_DPI, template: dict | None
             draw.text((x, y), line, font=font, fill=fill)
             y += int(line_h * spacing)
 
-    values = _label_values(box)
+    format_values = _format_values(values)
 
     def resolve_text(element: dict, default: str = "") -> str:
         template_text = str(element.get("template", "")).strip()
         if template_text:
             try:
-                return template_text.format_map(values)
+                return template_text.format_map(format_values)
             except Exception:
                 return template_text
         key = str(element.get("key", "")).strip()
         if key:
-            return values.get(key, "")
+            try:
+                return ("{" + key + "}").format_map(format_values)
+            except Exception:
+                return str(format_values.get(key, ""))
         return default
 
     for element in template.get("elements", []):
@@ -641,6 +739,11 @@ def render_label(box: BoxEtiqueta, dpi: int = DEFAULT_DPI, template: dict | None
                 value_font = fit_font(value, max_width, int(element.get("value_size", 68)), int(element.get("min_size", 42)), bool(element.get("bold", True)))
                 draw.text((x, value_y), value, font=value_font, fill=element.get("fill", "#0C0C0C"))
     return image.convert("L").convert("RGB")
+
+
+def render_label(box: BoxEtiqueta, dpi: int = DEFAULT_DPI, template: dict | None = None) -> Image.Image:
+    """Backwards-compatible renderer for the existing weights application."""
+    return render_template(_label_values(box), dpi=dpi, template=template)
 
 
 def expand_labels(boxes: Iterable[BoxEtiqueta]) -> list[BoxEtiqueta]:
@@ -775,6 +878,55 @@ def print_labels_windows(boxes: Iterable[BoxEtiqueta], printer_name: str | None 
         hdc.EndDoc()
         hdc.DeleteDC()
     return len(labels)
+
+
+def print_template_values_windows(
+    values: Mapping[str, object],
+    copies: int,
+    printer_name: str | None = None,
+    template: dict | None = None,
+    document_name: str = "Etiquetas producto",
+) -> int:
+    """Print arbitrary template values through the same Windows/Citizen path."""
+    try:
+        import win32con
+        import win32ui
+        from PIL import ImageWin
+    except Exception as exc:
+        raise RuntimeError("Para imprimir en Windows instala pywin32. Puedes guardar PNG para pruebas.") from exc
+
+    if copies < 1:
+        raise ValueError("El numero de copias debe ser mayor que cero.")
+    printer = printer_name or default_windows_printer()
+    if not printer:
+        raise ValueError("Selecciona una impresora.")
+    active_template = template or load_label_template()
+    hdc = win32ui.CreateDC()
+    hdc.CreatePrinterDC(printer)
+    printable_width = hdc.GetDeviceCaps(win32con.HORZRES)
+    printable_height = hdc.GetDeviceCaps(win32con.VERTRES)
+    physical_width = hdc.GetDeviceCaps(win32con.PHYSICALWIDTH) or printable_width
+    physical_height = hdc.GetDeviceCaps(win32con.PHYSICALHEIGHT) or printable_height
+    offset_x = hdc.GetDeviceCaps(win32con.PHYSICALOFFSETX)
+    offset_y = hdc.GetDeviceCaps(win32con.PHYSICALOFFSETY)
+    dpi_x = max(hdc.GetDeviceCaps(win32con.LOGPIXELSX), 1)
+    dpi_y = max(hdc.GetDeviceCaps(win32con.LOGPIXELSY), 1)
+    hdc.StartDoc(document_name)
+    try:
+        for _ in range(copies):
+            image = render_template(values, dpi=DEFAULT_DPI, template=active_template).convert("RGB")
+            rect = calculate_centered_print_rect(
+                physical_width, physical_height, printable_width, printable_height,
+                offset_x, offset_y, dpi_x, dpi_y, image.width, image.height,
+                safe_margin_mm=safe_margin_mm_from_template(active_template),
+            )
+            hdc.StartPage()
+            ImageWin.Dib(image).draw(hdc.GetHandleOutput(), rect)
+            hdc.EndPage()
+    finally:
+        hdc.EndDoc()
+        hdc.DeleteDC()
+    return copies
 
 
 def validate_workday(day: date) -> tuple[bool, str]:

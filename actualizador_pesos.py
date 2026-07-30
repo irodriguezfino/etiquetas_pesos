@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,7 @@ import zipfile
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+import certifi
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -22,6 +24,7 @@ APP_NAME = "Etiquetado Pesos"
 LAUNCHER_EXE = "Etiquetado_Pesos.exe"
 LOCAL_VERSION_FILE = "version_local.json"
 HTTP_TIMEOUT_SECONDS = 20
+SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 UPDATE_LOG_FILE = (
     Path(os.environ.get("LOCALAPPDATA", tempfile.gettempdir()))
     / APP_NAME
@@ -79,7 +82,7 @@ def download_file(url: str, target: Path, progress_callback=None, cancel_event: 
     log_update(f"Descargando paquete: url={url}; target={target}")
     request = Request(url, headers={"User-Agent": "Etiquetado-Pesos-Updater"})
     target.parent.mkdir(parents=True, exist_ok=True)
-    with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response, target.open("wb") as handle:
+    with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS, context=SSL_CONTEXT) as response, target.open("wb") as handle:
         total = int(response.headers.get("Content-Length") or 0)
         downloaded = 0
         while True:

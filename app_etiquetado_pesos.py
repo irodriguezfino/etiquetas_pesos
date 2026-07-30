@@ -69,6 +69,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
         "numero_partida",
         "rango_pesos",
         "rango_peso",
+        "porcentaje",
         "etiquetas",
         "pie",
     )
@@ -97,6 +98,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
         "numero_partida": "Numero de partida",
         "rango_pesos": "Rango de pesos",
         "rango_peso": "Rango de pesos",
+        "porcentaje": "Porcentaje",
         "etiquetas": "Copias",
         "pie": "Pie calculado",
     }
@@ -105,6 +107,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
         ("Albaran", "albaran", "ALBARAN"),
         ("Partida", "partida", "PARTIDA"),
         ("Rango pesos", "rango_pesos", "RANGO DE PESOS"),
+        ("Porcentaje", "porcentaje", "PORCENTAJE"),
     )
     FOOTER_PRESETS = (
         "{articulo_codigo} | ALB {albaran} | PART {partida}",
@@ -116,6 +119,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
         ("Alb.", "albaran"),
         ("Part.", "partida"),
         ("Rango", "rango_pesos"),
+        ("%", "porcentaje"),
     )
 
     def _sample_box(self) -> BoxEtiqueta:
@@ -130,7 +134,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
             box_numero=1,
             lote="P-260630",
             articulo_codigo="607",
-            articulo_nombre="JAMON DE CEBO IBERICO 10 - 12 KG",
+            articulo_nombre="JAMON DE CEBO IBERICO",
             fecha_recepcion=date.today(),
             fecha_entrada=date.today(),
             fecha_salida=date.today(),
@@ -147,6 +151,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
             albaran="A-12345",
             partida="P-260630",
             rango_pesos="10 - 12 kg",
+            porcentaje="100%",
         )
 
     def _sample_values(self) -> dict[str, str]:
@@ -162,6 +167,7 @@ class PesoLabelTemplateEditor(LabelTemplateEditor):
             "numero_partida": box.partida,
             "rango_peso": box.rango_pesos,
             "rango_pesos": box.rango_pesos,
+            "porcentaje": box.porcentaje,
             "etiquetas": str(box.etiquetas),
             "pie": f"{box.articulo_codigo} | ALB {box.albaran} | PART {box.partida}",
         }
@@ -471,11 +477,14 @@ class EtiquetadoPesosApp(tk.Tk):
         return [display for _code, _name, display in self.article_values]
 
     def _range_display_values(self) -> list[str]:
-        values: list[str] = []
-        for item in self.range_values:
-            if item.range_label not in values:
-                values.append(item.range_label)
-        return values
+        return list(dict.fromkeys(self._range_display(item) for item in self.range_values))
+
+    def _range_display(self, item: RangoSalazon) -> str:
+        label = item.range_label or "Sin rango de peso"
+        duplicates = sum(1 for current in self.range_values if current.range_label == item.range_label)
+        if duplicates > 1:
+            return f"{label} \u2014 {item.porcentaje or 'sin porcentaje'}"
+        return label
 
     def _filter_articles(self, _event=None) -> None:
         typed = self.var_articulo.get().strip().lower()
@@ -485,7 +494,7 @@ class EtiquetadoPesosApp(tk.Tk):
             values = [
                 display
                 for code, name, display in self.article_values
-                if typed in code.lower() or typed in name.lower()
+                if typed in code.lower() or typed in name.lower() or typed in display.lower()
             ]
         self.article_combo.configure(values=values[:80])
         self._refresh_ranges_for_article()
@@ -519,7 +528,7 @@ class EtiquetadoPesosApp(tk.Tk):
         code, _name, _display = selected
         ranges = salazon_ranges_for_article(code, self.salazon_ranges)
         selected_name = _name.lower()
-        self.range_values = [item for item in ranges if article_name_without_weight_range(item.articulo_nombre).lower() == selected_name]
+        self.range_values = [item for item in ranges if item.articulo_nombre.lower() == selected_name]
         if not self.range_values:
             self.range_values = list(ranges)
         displays = self._range_display_values()
@@ -534,9 +543,9 @@ class EtiquetadoPesosApp(tk.Tk):
         if not raw:
             return None
         for item in self.range_values:
-            if raw == item.range_label:
+            if raw == self._range_display(item):
                 return item
-        matches = [item for item in self.range_values if raw.lower() in item.range_label.lower()]
+        matches = [item for item in self.range_values if raw.lower() in self._range_display(item).lower()]
         return matches[0] if len(matches) == 1 else None
 
     def _validate_silently(self) -> bool:
@@ -557,14 +566,17 @@ class EtiquetadoPesosApp(tk.Tk):
         self.var_etiquetas.set(str(max(1, current + delta)))
         self._validate_silently()
 
-    def _read_inputs(self) -> tuple[str, str, str, str, str, int]:
+    def _read_inputs(self) -> tuple[str, str, str, str, str, int, str]:
         selected = self._selected_article()
         if not selected:
             raise ValueError("selecciona un articulo valido")
-        code, name, _display = selected
+        code, _base_name, _display = selected
         selected_range = self._selected_range()
         if not selected_range:
             raise ValueError("selecciona un rango de pesos")
+        name = article_name_without_weight_range(
+            selected_range.articulo_nombre_original or selected_range.articulo_nombre
+        )
         albaran = self.var_albaran.get().strip().upper()
         partida = self.var_partida.get().strip().upper()
         rango = selected_range.range_label
@@ -574,7 +586,7 @@ class EtiquetadoPesosApp(tk.Tk):
             raise ValueError("las etiquetas deben ser un numero entero") from exc
         if etiquetas <= 0:
             raise ValueError("las etiquetas deben ser mayores que cero")
-        return code, name, albaran, partida, rango, etiquetas
+        return code, name, albaran, partida, rango, etiquetas, selected_range.porcentaje
 
     def _range_numbers(self, rango: str) -> tuple[float, float]:
         numbers = re.findall(r"\d+(?:[,.]\d+)?", rango)
@@ -590,7 +602,7 @@ class EtiquetadoPesosApp(tk.Tk):
         return 0.0, 0.0
 
     def _build_label(self) -> BoxEtiqueta:
-        code, name, albaran, partida, rango, etiquetas = self._read_inputs()
+        code, name, albaran, partida, rango, etiquetas, porcentaje = self._read_inputs()
         low, high = self._range_numbers(rango)
         today = date.today()
         return BoxEtiqueta(
@@ -614,6 +626,7 @@ class EtiquetadoPesosApp(tk.Tk):
             albaran=albaran,
             partida=partida,
             rango_pesos=rango,
+            porcentaje=porcentaje,
         )
 
     def generate_preview(self) -> None:
@@ -730,7 +743,7 @@ class EtiquetadoPesosApp(tk.Tk):
                 box_numero=1,
                 lote="P-260630",
                 articulo_codigo="607",
-                articulo_nombre="JAMON DE CEBO IBERICO 10 - 12 KG",
+                articulo_nombre="JAMON DE CEBO IBERICO",
                 fecha_recepcion=today,
                 fecha_entrada=today,
                 fecha_salida=today,
@@ -747,6 +760,7 @@ class EtiquetadoPesosApp(tk.Tk):
                 albaran="A-12345",
                 partida="P-260630",
                 rango_pesos="10 - 12 kg",
+                porcentaje="100%",
             )
 
     def _on_template_saved(self) -> None:

@@ -2,6 +2,13 @@
 
 All notable changes to Etiquetado Pesos are documented here.
 
+## [1.0.6] - 2026-07-30
+
+- The article selector groups repeated products and shows their available percentages.
+- Labels preserve the percentage in the original CSV position while keeping the selected weight range in its own section.
+- Weight bounds such as `<13` and `+19` are excluded from the article name and remain selectable as ranges.
+- Improved certificate handling for update discovery and downloads.
+
 ## [1.0.5] - 2026-07-14
 
 - Article selector now displays only the article name while retaining code-based range lookup and search.

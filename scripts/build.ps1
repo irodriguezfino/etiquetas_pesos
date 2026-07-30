@@ -26,9 +26,9 @@ New-Item -ItemType Directory -Force -Path "github_release\releases", "github_rel
 
 & $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos_App" --icon $icon --version-file "build\version_info.txt" --add-data "assets;assets" --add-data "config;config" --hidden-import win32print --hidden-import win32con --hidden-import win32ui --hidden-import PIL.ImageWin app_etiquetado_pesos.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller no pudo generar Etiquetado_Pesos_App.exe." }
-& $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos" --icon $icon --version-file "build\version_info.txt" lanzador_pesos.py
+& $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos" --icon $icon --version-file "build\version_info.txt" --collect-data certifi lanzador_pesos.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller no pudo generar Etiquetado_Pesos.exe." }
-& $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos_Updater" --icon $icon --version-file "build\version_info.txt" actualizador_pesos.py
+& $python @pythonArgs -m PyInstaller --noconfirm --clean --noconsole --onefile --name "Etiquetado_Pesos_Updater" --icon $icon --version-file "build\version_info.txt" --collect-data certifi actualizador_pesos.py
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller no pudo generar Etiquetado_Pesos_Updater.exe." }
 
 if (Test-Path $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
